@@ -16,10 +16,8 @@ import {
   Lock,
   UserCircle,
   MapPinned,
-  Plus,
   Calendar,
-  Filter,
-  AlertCircle
+  Filter
 } from 'lucide-react';
 import { storageService } from './services/storageService';
 import { Visit, VisitorCategory, LocationType } from './types';
@@ -39,47 +37,65 @@ import {
   Legend
 } from 'recharts';
 
+// Admin credentials used for the secure data export feature
 const ADMIN_ID = "IPM_UNIT_P&G";
 const ADMIN_PASSWORD = "Rexy";
 
 const App: React.FC = () => {
-  const [view, setView] = useState<'checkin' | 'dashboard'>('checkin');
-  const [lang, setLang] = useState<Language>('en');
-  const [dashboardFilter, setDashboardFilter] = useState<LocationType | 'ALL'>('ALL');
-  const [visits, setVisits] = useState<Visit[]>([]);
-  const [lastVisit, setLastVisit] = useState<Visit | null>(null);
-  const [showPopup, setShowPopup] = useState(false);
+  // --- STATE MANAGEMENT ---
+  // useState tracks information that changes. When state updates, React re-renders the UI.
+  const [view, setView] = useState<'checkin' | 'dashboard'>('checkin'); // Current active screen
+  const [lang, setLang] = useState<Language>('en'); // Selected language (English or Malay)
+  const [dashboardFilter, setDashboardFilter] = useState<LocationType | 'ALL'>('ALL'); // Filter for charts
+  const [visits, setVisits] = useState<Visit[]>([]); // List of all visit records
+  const [lastVisit, setLastVisit] = useState<Visit | null>(null); // Most recent visitor (for popup)
+  const [showPopup, setShowPopup] = useState(false); // Visibility of the ticket popup
   
-  // Auth state
+  // Auth state: Used to lock the export feature to staff only
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [adminIdInput, setAdminIdInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [authError, setAuthError] = useState(false);
 
-  // Lawatan Form state
+  // Group Visit (Lawatan) Form state: Handles input for delegations/organizations
   const [showLawatanModal, setShowLawatanModal] = useState(false);
   const [lawatanLocation, setLawatanLocation] = useState<LocationType>(LocationType.MUSEUM);
   const [orgName, setOrgName] = useState('');
   const [paxCount, setPaxCount] = useState<string>('');
   const [formTouched, setFormTouched] = useState({ org: false, pax: false });
 
-  // Date Range state
+  // Custom Date Range state: Allows admins to see stats for specific time periods
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
+  // Translation helper: Returns the correct text strings based on 'lang' state
   const t = translations[lang];
 
+  // Load data from storage only once when the app starts
   useEffect(() => {
     setVisits(storageService.getVisits());
   }, []);
 
+  // Fix: Added isLawatanFormValid memo to validate the group visit form inputs.
+  const isLawatanFormValid = useMemo(() => {
+    const pax = parseInt(paxCount);
+    return orgName.trim().length >= 3 && !isNaN(pax) && pax >= 1 && pax <= 500;
+  }, [orgName, paxCount]);
+
+  // --- BUSINESS LOGIC ---
+
+  // handleCheckIn creates a new record and triggers the success ticket popup
   const handleCheckIn = (category: VisitorCategory, location: LocationType, groupInfo?: string, groupSize: number = 1) => {
+    // Save to browser memory (simulating a database save)
     const visit = storageService.saveVisit(category, location, groupInfo, groupSize);
+    
+    // Update local state to show the new ticket number immediately
     setVisits(prev => [visit, ...prev]);
     setLastVisit(visit);
     setShowPopup(true);
-    // Reset Lawatan form
+    
+    // Clear forms after submission
     setOrgName('');
     setPaxCount('');
     setFormTouched({ org: false, pax: false });
@@ -91,30 +107,10 @@ const App: React.FC = () => {
     setShowLawatanModal(true);
   };
 
-  // Lawatan Validation
-  const orgError = useMemo(() => {
-    if (!formTouched.org) return null;
-    const trimmed = orgName.trim();
-    if (!trimmed) return t.errOrgRequired;
-    if (trimmed.length < 3) return t.errOrgShort;
-    return null;
-  }, [orgName, formTouched.org, t]);
+  // --- DATA PROCESSING (ANALYTICS) ---
 
-  const paxError = useMemo(() => {
-    if (!formTouched.pax) return null;
-    if (!paxCount) return t.errPaxRequired;
-    const val = parseInt(paxCount);
-    if (isNaN(val) || val < 1) return t.errPaxMin;
-    if (val > 500) return t.errPaxMax;
-    return null;
-  }, [paxCount, formTouched.pax, t]);
-
-  const isLawatanFormValid = useMemo(() => {
-    const trimmedOrg = orgName.trim();
-    const valPax = parseInt(paxCount);
-    return trimmedOrg.length >= 3 && !isNaN(valPax) && valPax >= 1 && valPax <= 500;
-  }, [orgName, paxCount]);
-
+  // useMemo caches these lists. It only re-calculates when 'visits' or 'dashboardFilter' changes.
+  // This makes the app run smoothly even with thousands of records.
   const filteredVisitsByLocation = useMemo(() => {
     if (dashboardFilter === 'ALL') return visits;
     return visits.filter(v => v.location === dashboardFilter);
@@ -125,7 +121,7 @@ const App: React.FC = () => {
     
     return filteredVisitsByLocation.filter(v => {
       const vDate = new Date(v.timestamp);
-      vDate.setHours(0, 0, 0, 0);
+      vDate.setHours(0, 0, 0, 0); // Ignore time, only compare dates
       
       const start = startDate ? new Date(startDate) : null;
       if (start) start.setHours(0, 0, 0, 0);
@@ -140,18 +136,14 @@ const App: React.FC = () => {
     });
   }, [filteredVisitsByLocation, startDate, endDate]);
 
+  // Statistics calculation logic for the dashboard cards
   const stats = useMemo(() => {
     const now = new Date();
     
-    const dailyStart = new Date(now);
-    dailyStart.setHours(0, 0, 0, 0);
-
-    const weeklyStart = new Date(now);
-    weeklyStart.setDate(now.getDate() - now.getDay());
-    weeklyStart.setHours(0, 0, 0, 0);
-
+    // Reset boundary dates
+    const dailyStart = new Date(now); dailyStart.setHours(0, 0, 0, 0);
+    const weeklyStart = new Date(now); weeklyStart.setDate(now.getDate() - now.getDay()); weeklyStart.setHours(0, 0, 0, 0);
     const monthlyStart = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-
     const yearlyStart = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
 
     const sumSince = (date: Date) => 
@@ -169,27 +161,7 @@ const App: React.FC = () => {
     };
   }, [filteredVisitsByLocation, visitsInRange]);
 
-  const chartData = useMemo(() => {
-    const museumCount = visitsInRange.reduce((sum, v) => v.location === LocationType.MUSEUM ? sum + (v.groupSize || 1) : sum, 0);
-    const galleryCount = visitsInRange.reduce((sum, v) => v.location === LocationType.ARTS_GALLERY ? sum + (v.groupSize || 1) : sum, 0);
-    
-    const studentCount = visitsInRange.filter(v => v.category === VisitorCategory.STUDENT).length;
-    const visitorCount = visitsInRange.filter(v => v.category === VisitorCategory.VISITOR).length;
-    const lawatanCount = visitsInRange.filter(v => v.category === VisitorCategory.LAWATAN).length;
-
-    return {
-      locations: [
-        { name: t.museum, value: museumCount },
-        { name: t.gallery, value: galleryCount }
-      ],
-      categories: [
-        { name: t.students, value: studentCount, fill: '#4338ca' },
-        { name: t.visitors, value: visitorCount, fill: '#f43f5e' },
-        { name: t.lawatan, value: lawatanCount, fill: '#f59e0b' }
-      ]
-    };
-  }, [visitsInRange, t]);
-
+  // Export data as an Excel-compatible CSV file
   const executeExport = () => {
     const headers = [t.category, t.location, 'Org Name', 'Pax', 'Date', 'Time', 'Daily #', 'Weekly #', 'Monthly #', 'Yearly #'];
     const rows = visitsInRange.map(v => {
@@ -213,7 +185,7 @@ const App: React.FC = () => {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `IPM_Logs_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `IPM_Logs_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -242,14 +214,17 @@ const App: React.FC = () => {
     }
   };
 
+  // --- IMAGE ASSETS MAPPING ---
+  // Corresponding your provided photos to the app's visual elements
   const IMAGES = {
-    bg: "input_file_2.png",
-    museum: "input_file_0.png",
-    gallery: "input_file_1.png"
+    bg: "input_file_2.png",      // IPM Welcome Signboard (Background)
+    museum: "input_file_1.png",  // White Colonial Building (Museum)
+    gallery: "input_file_0.png"  // Yellow Building with "Galeri Seni" (Arts Gallery)
   };
 
   return (
     <div className="min-h-screen flex flex-col relative overflow-x-hidden">
+      {/* GLOBAL BACKGROUND: Styled with a semi-transparent dark overlay for text readability */}
       <div 
         className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${IMAGES.bg})` }}
@@ -257,6 +232,7 @@ const App: React.FC = () => {
         <div className="absolute inset-0 bg-slate-900/65 backdrop-blur-[4px]"></div>
       </div>
 
+      {/* NAVIGATION: Glassmorphism effect sticky header */}
       <nav className="bg-white/95 backdrop-blur-md border-b border-white/20 sticky top-0 z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-14 md:h-20 items-center">
@@ -271,6 +247,7 @@ const App: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-1.5 md:gap-6">
+              {/* DESKTOP NAV TABS */}
               <div className="hidden sm:flex items-center bg-slate-100 p-1 rounded-xl">
                 <button onClick={() => setView('checkin')} className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${view === 'checkin' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}>
                   {t.navCheckin}
@@ -286,6 +263,7 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
+          {/* MOBILE NAVIGATION BAR (Bottom layout) */}
           <div className="sm:hidden flex items-center justify-around border-t border-slate-100 py-1.5">
             <button onClick={() => setView('checkin')} className={`flex flex-col items-center gap-0.5 ${view === 'checkin' ? 'text-indigo-700' : 'text-slate-400'}`}>
               <UserCircle className="w-4 h-4" /><span className="text-[8px] font-bold uppercase">{t.navCheckin}</span>
@@ -297,7 +275,9 @@ const App: React.FC = () => {
         </div>
       </nav>
 
+      {/* MAIN VIEWPORT */}
       <main className="relative z-10 flex-grow max-w-7xl mx-auto w-full px-4 md:px-8 py-4 md:py-12">
+        {/* CHECK-IN VIEW: Displays both Museum and Gallery selection cards */}
         {view === 'checkin' && (
           <div className="max-w-5xl mx-auto space-y-4 md:space-y-12 animate-in fade-in zoom-in-95 duration-500">
             <div className="text-center space-y-1">
@@ -336,6 +316,7 @@ const App: React.FC = () => {
               ))}
             </div>
 
+            {/* RESET STATUS: Visual feedback about the daily 12:00 AM counter reset */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-6 text-slate-100 text-[9px] md:text-sm font-semibold pt-1">
               <div className="flex items-center gap-1.5 bg-black/40 px-3 py-1.5 rounded-full backdrop-blur-md border border-white/10">
                 <Clock className="w-3 h-3 text-amber-400" />
@@ -349,6 +330,7 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {/* DASHBOARD VIEW: Displays detailed analytics and allows data exporting */}
         {view === 'dashboard' && (
           <div className="space-y-4 md:space-y-8 animate-in slide-in-from-bottom-6 duration-500">
             <div className="bg-white/95 backdrop-blur-xl p-3 md:p-10 rounded-xl md:rounded-[3rem] shadow-2xl">
@@ -363,6 +345,7 @@ const App: React.FC = () => {
                 
                 <div className="flex flex-col gap-3">
                   <div className="flex flex-wrap items-center gap-2 md:gap-4">
+                    {/* CHART FILTERS: Switch between Museum, Gallery, or All Locations */}
                     <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
                       {['ALL', LocationType.MUSEUM, LocationType.ARTS_GALLERY].map((f) => (
                         <button key={f} onClick={() => setDashboardFilter(f as any)} className={`px-2 md:px-4 py-1 rounded-md text-[9px] md:text-xs font-black transition-all uppercase tracking-tighter ${dashboardFilter === f ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500'}`}>
@@ -377,6 +360,7 @@ const App: React.FC = () => {
                     </button>
                   </div>
 
+                  {/* DATE RANGE INPUTS: Filter logs by a specific calendar window */}
                   <div className="bg-slate-50 p-2 md:p-6 rounded-lg md:rounded-2xl border border-slate-200 flex flex-wrap items-center gap-3 md:gap-6 shadow-sm">
                     <div className="flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 text-indigo-700" />
@@ -391,6 +375,7 @@ const App: React.FC = () => {
                 </div>
               </div>
 
+              {/* AUTOMATED COUNTERS: Resets are handled by storageService.ts logic */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-6">
                 <StatsCard label={t.daily} value={stats.daily} icon={<Users />} color="bg-blue-600" />
                 <StatsCard label={t.weekly} value={stats.weekly} icon={<BarChart3 />} color="bg-indigo-700" />
@@ -404,7 +389,47 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Popups & Modals refined for smaller icon footprint */}
+      {/* OVERLAY: SUCCESS TICKET POPUP */}
+      {showPopup && lastVisit && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-lg animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[2rem] md:rounded-[3.5rem] shadow-2xl relative p-7 md:p-12 text-center animate-in zoom-in-95 duration-500">
+            <button onClick={() => setShowPopup(false)} className="absolute top-5 right-5 p-1.5 rounded-full hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
+            <div className="w-14 h-14 md:w-20 md:h-20 bg-emerald-100 rounded-2xl md:rounded-[2rem] flex items-center justify-center mb-5 mx-auto shadow-inner"><CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 text-emerald-600" /></div>
+            <h3 className="text-xl md:text-4xl font-serif text-slate-900 mb-0.5 leading-tight">{t.checkinSuccess}</h3>
+            <p className="text-[9px] md:text-sm text-slate-500 font-bold mb-6 md:mb-10 uppercase tracking-widest">{t.welcomeTo} {lastVisit.location === LocationType.MUSEUM ? t.museum : t.gallery}</p>
+            
+            <div className="bg-slate-50 p-5 md:p-10 rounded-2xl md:rounded-[2.5rem] border-2 border-dashed border-slate-200">
+              <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] font-black text-slate-400 mb-2">{t.ticketNumber}</p>
+              {/* Daily Number generated by storageService.ts resetting at 12:00 AM daily */}
+              <div className="text-5xl md:text-8xl font-mono font-black text-indigo-700 tabular-nums leading-none tracking-tighter">
+                #{String(lastVisit.dailyNumber).padStart(3, '0')}
+              </div>
+            </div>
+            
+            <button onClick={() => setShowPopup(false)} className="mt-6 md:mt-10 w-full py-3.5 md:py-5 bg-slate-900 text-white font-black rounded-xl md:rounded-2xl hover:bg-indigo-700 transition-all text-xs md:text-lg uppercase tracking-widest">{t.closeTicket}</button>
+          </div>
+        </div>
+      )}
+
+      {/* OVERLAY: AUTHENTICATION MODAL */}
+      {showAuthModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+          <div className="bg-white w-full max-w-sm rounded-2xl md:rounded-[2.5rem] p-8 animate-in zoom-in-95">
+             <h3 className="text-xl font-serif text-center mb-6">{t.staffAccess}</h3>
+             <form onSubmit={handleAuthConfirm} className="space-y-4">
+                <input type="text" value={adminIdInput} onChange={(e) => setAdminIdInput(e.target.value)} placeholder={t.adminId} className="w-full px-4 py-3 bg-slate-100 rounded-xl outline-none font-bold" />
+                <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder={t.adminPassword} className="w-full px-4 py-3 bg-slate-100 rounded-xl outline-none font-bold" />
+                {authError && <p className="text-rose-500 text-[10px] font-black uppercase text-center">{t.invalidPasscode}</p>}
+                <div className="flex gap-3">
+                  <button type="button" onClick={() => setShowAuthModal(false)} className="flex-1 py-3 text-slate-400 font-black text-xs uppercase">Cancel</button>
+                  <button type="submit" className="flex-1 py-3 bg-slate-900 text-white font-black rounded-xl text-xs uppercase tracking-widest">{t.confirm}</button>
+                </div>
+             </form>
+          </div>
+        </div>
+      )}
+
+      {/* OVERLAY: LAWATAN FORM */}
       {showLawatanModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
           <div className="bg-white w-full max-w-md rounded-2xl md:rounded-[3rem] shadow-2xl relative p-5 md:p-10 animate-in zoom-in-95 duration-300">
@@ -443,43 +468,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {showPopup && lastVisit && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-slate-900/90 backdrop-blur-lg animate-in fade-in duration-300">
-          <div className="bg-white w-full max-sm rounded-[2rem] md:rounded-[3.5rem] shadow-2xl relative p-7 md:p-12 text-center animate-in zoom-in-95 duration-500">
-            <button onClick={() => setShowPopup(false)} className="absolute top-5 right-5 p-1.5 rounded-full hover:bg-slate-100 text-slate-400"><X className="w-4 h-4" /></button>
-            <div className="w-14 h-14 md:w-20 md:h-20 bg-emerald-100 rounded-2xl md:rounded-[2rem] flex items-center justify-center mb-5 mx-auto shadow-inner"><CheckCircle2 className="w-8 h-8 md:w-12 md:h-12 text-emerald-600" /></div>
-            <h3 className="text-xl md:text-4xl font-serif text-slate-900 mb-0.5 leading-tight">{t.checkinSuccess}</h3>
-            <p className="text-[9px] md:text-sm text-slate-500 font-bold mb-6 md:mb-10 uppercase tracking-widest">{t.welcomeTo} {lastVisit.location === LocationType.MUSEUM ? t.museum : t.gallery}</p>
-            
-            <div className="bg-slate-50 p-5 md:p-10 rounded-2xl md:rounded-[2.5rem] border-2 border-dashed border-slate-200">
-              <p className="text-[8px] md:text-[10px] uppercase tracking-[0.2em] font-black text-slate-400 mb-2">{t.ticketNumber}</p>
-              <div className="text-5xl md:text-8xl font-mono font-black text-indigo-700 tabular-nums leading-none tracking-tighter">
-                #{String(lastVisit.dailyNumber).padStart(3, '0')}
-              </div>
-            </div>
-            
-            <button onClick={() => setShowPopup(false)} className="mt-6 md:mt-10 w-full py-3.5 md:py-5 bg-slate-900 text-white font-black rounded-xl md:rounded-2xl hover:bg-indigo-700 transition-all text-xs md:text-lg uppercase tracking-widest">{t.closeTicket}</button>
-          </div>
-        </div>
-      )}
-
-      {showAuthModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
-          <div className="bg-white w-full max-w-sm rounded-2xl md:rounded-[2.5rem] p-8 animate-in zoom-in-95">
-             <h3 className="text-xl font-serif text-center mb-6">{t.staffAccess}</h3>
-             <form onSubmit={handleAuthConfirm} className="space-y-4">
-                <input type="text" value={adminIdInput} onChange={(e) => setAdminIdInput(e.target.value)} placeholder={t.adminId} className="w-full px-4 py-3 bg-slate-100 rounded-xl outline-none font-bold" />
-                <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder={t.adminPassword} className="w-full px-4 py-3 bg-slate-100 rounded-xl outline-none font-bold" />
-                {authError && <p className="text-rose-500 text-[10px] font-black uppercase text-center">{t.invalidPasscode}</p>}
-                <div className="flex gap-3">
-                  <button type="button" onClick={() => setShowAuthModal(false)} className="flex-1 py-3 text-slate-400 font-black text-xs uppercase">Cancel</button>
-                  <button type="submit" className="flex-1 py-3 bg-slate-900 text-white font-black rounded-xl text-xs uppercase tracking-widest">{t.confirm}</button>
-                </div>
-             </form>
-          </div>
-        </div>
-      )}
-
+      {/* FOOTER */}
       <footer className="relative z-10 bg-white/10 backdrop-blur-md border-t border-white/10 py-6 md:py-16">
         <div className="max-w-7xl mx-auto px-4 flex flex-col items-center space-y-1.5">
           <span className="text-white font-serif text-xs md:text-xl">Malay Civilization Institute</span>
