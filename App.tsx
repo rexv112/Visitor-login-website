@@ -213,7 +213,7 @@ const App: React.FC = () => {
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", `MCI_Logs_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute("download", `IPM_Logs_Export_${new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -242,10 +242,11 @@ const App: React.FC = () => {
     }
   };
 
+  // Updated images with provided local files
   const IMAGES = {
-    bg: "https://images.unsplash.com/photo-1596422846543-75c6fc18a593?auto=format&fit=crop&q=80&w=2000",
-    museum: "https://images.unsplash.com/photo-1566127444941-8e1250b784f0?auto=format&fit=crop&q=80&w=800",
-    gallery: "https://images.unsplash.com/photo-1459908676235-d5f02a50184b?auto=format&fit=crop&q=80&w=800"
+    bg: "input_file_2.png",      // IPM Building Background
+    museum: "input_file_0.png",  // Muzium Warisan
+    gallery: "input_file_1.png"   // Galeri Seni
   };
 
   return (
