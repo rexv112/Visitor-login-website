@@ -18,7 +18,8 @@ import {
   MapPinned,
   Plus,
   Calendar,
-  Filter
+  Filter,
+  AlertCircle
 } from 'lucide-react';
 import { storageService } from './services/storageService';
 import { Visit, VisitorCategory, LocationType } from './types';
@@ -61,6 +62,7 @@ const App: React.FC = () => {
   const [lawatanLocation, setLawatanLocation] = useState<LocationType>(LocationType.MUSEUM);
   const [orgName, setOrgName] = useState('');
   const [paxCount, setPaxCount] = useState<string>('');
+  const [formTouched, setFormTouched] = useState({ org: false, pax: false });
 
   // Date Range state
   const [startDate, setStartDate] = useState<string>('');
@@ -80,6 +82,7 @@ const App: React.FC = () => {
     // Reset Lawatan form
     setOrgName('');
     setPaxCount('');
+    setFormTouched({ org: false, pax: false });
     setShowLawatanModal(false);
   };
 
@@ -87,6 +90,30 @@ const App: React.FC = () => {
     setLawatanLocation(location);
     setShowLawatanModal(true);
   };
+
+  // Lawatan Validation
+  const orgError = useMemo(() => {
+    if (!formTouched.org) return null;
+    const trimmed = orgName.trim();
+    if (!trimmed) return t.errOrgRequired;
+    if (trimmed.length < 3) return t.errOrgShort;
+    return null;
+  }, [orgName, formTouched.org, t]);
+
+  const paxError = useMemo(() => {
+    if (!formTouched.pax) return null;
+    if (!paxCount) return t.errPaxRequired;
+    const val = parseInt(paxCount);
+    if (isNaN(val) || val < 1) return t.errPaxMin;
+    if (val > 500) return t.errPaxMax;
+    return null;
+  }, [paxCount, formTouched.pax, t]);
+
+  const isLawatanFormValid = useMemo(() => {
+    const trimmedOrg = orgName.trim();
+    const valPax = parseInt(paxCount);
+    return trimmedOrg.length >= 3 && !isNaN(valPax) && valPax >= 1 && valPax <= 500;
+  }, [orgName, paxCount]);
 
   const filteredVisitsByLocation = useMemo(() => {
     if (dashboardFilter === 'ALL') return visits;
@@ -143,13 +170,12 @@ const App: React.FC = () => {
   }, [filteredVisitsByLocation, visitsInRange]);
 
   const chartData = useMemo(() => {
-    // Charts react to the date range
     const museumCount = visitsInRange.reduce((sum, v) => v.location === LocationType.MUSEUM ? sum + (v.groupSize || 1) : sum, 0);
     const galleryCount = visitsInRange.reduce((sum, v) => v.location === LocationType.ARTS_GALLERY ? sum + (v.groupSize || 1) : sum, 0);
     
-    const studentCount = visitsInRange.filter(v => v.category === VisitorCategory.STUDENT).reduce((sum, v) => sum + (v.groupSize || 1), 0);
-    const visitorCount = visitsInRange.filter(v => v.category === VisitorCategory.VISITOR).reduce((sum, v) => sum + (v.groupSize || 1), 0);
-    const lawatanCount = visitsInRange.filter(v => v.category === VisitorCategory.LAWATAN).reduce((sum, v) => sum + (v.groupSize || 1), 0);
+    const studentCount = visitsInRange.filter(v => v.category === VisitorCategory.STUDENT).length;
+    const visitorCount = visitsInRange.filter(v => v.category === VisitorCategory.VISITOR).length;
+    const lawatanCount = visitsInRange.filter(v => v.category === VisitorCategory.LAWATAN).length;
 
     return {
       locations: [
@@ -165,7 +191,6 @@ const App: React.FC = () => {
   }, [visitsInRange, t]);
 
   const executeExport = () => {
-    // Export respects date range
     const headers = [t.category, t.location, 'Org Name', 'Pax', 'Date', 'Time', 'Daily #', 'Weekly #', 'Monthly #', 'Yearly #'];
     const rows = visitsInRange.map(v => {
       const d = new Date(v.timestamp);
@@ -241,7 +266,7 @@ const App: React.FC = () => {
               </div>
               <div>
                 <h1 className="text-xl font-serif text-slate-900 tracking-tight leading-none">Malay Civilization Institute</h1>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black mt-1">ATMA Visitor Management</p>
+                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 font-black mt-1">IPM Visitor Management</p>
               </div>
             </div>
             
@@ -276,7 +301,6 @@ const App: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              {/* Museum Section */}
               <div className="group bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col transition-all hover:scale-[1.01] border-4 border-transparent hover:border-indigo-500/20">
                 <div className="h-64 relative overflow-hidden">
                   <img src={IMAGES.museum} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="Museum" />
@@ -301,7 +325,6 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              {/* Gallery Section */}
               <div className="group bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col transition-all hover:scale-[1.01] border-4 border-transparent hover:border-indigo-500/20">
                 <div className="h-64 relative overflow-hidden">
                   <img src={IMAGES.gallery} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" alt="Gallery" />
@@ -372,7 +395,6 @@ const App: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Date Range Selector */}
                   <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 flex flex-wrap items-center gap-6 shadow-sm">
                     <div className="flex items-center gap-3">
                       <Calendar className="w-5 h-5 text-indigo-700" />
@@ -518,11 +540,10 @@ const App: React.FC = () => {
         )}
       </main>
 
-      {/* Lawatan Form Modal */}
       {showLawatanModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/70 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-400 border border-white/20">
-            <button onClick={() => setShowLawatanModal(false)} className="absolute top-8 right-8 p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400">
+            <button onClick={() => { setShowLawatanModal(false); setFormTouched({ org: false, pax: false }); }} className="absolute top-8 right-8 p-2 rounded-full hover:bg-slate-100 transition-colors text-slate-400">
               <X className="w-6 h-6" />
             </button>
             <div className="p-10">
@@ -532,27 +553,49 @@ const App: React.FC = () => {
               
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">{t.orgName}</label>
+                  <div className="flex justify-between items-center ml-1">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-400">{t.orgName}</label>
+                  </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none"><UserCircle className="h-5 w-5 text-slate-400" /></div>
-                    <input type="text" value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder={t.orgNamePlaceholder} className="w-full pl-14 pr-6 py-5 bg-slate-100 border-2 border-transparent rounded-[1.5rem] font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all focus:border-indigo-700" />
+                    <input 
+                      type="text" 
+                      value={orgName} 
+                      onChange={(e) => setOrgName(e.target.value)} 
+                      onBlur={() => setFormTouched(prev => ({ ...prev, org: true }))}
+                      placeholder={t.orgNamePlaceholder} 
+                      className={`w-full pl-14 pr-6 py-5 bg-slate-100 border-2 rounded-[1.5rem] font-bold focus:outline-none focus:ring-4 transition-all ${orgError ? 'border-rose-300 ring-rose-500/10' : 'border-transparent focus:ring-indigo-500/10 focus:border-indigo-700'}`} 
+                    />
                   </div>
+                  {orgError && <div className="flex items-center gap-1.5 text-rose-600 text-[11px] font-black mt-1 ml-1 uppercase tracking-wider animate-in fade-in slide-in-from-top-1"><AlertCircle className="w-3.5 h-3.5" /> {orgError}</div>}
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">{t.totalPax}</label>
+                  <div className="flex justify-between items-center ml-1">
+                    <label className="text-xs font-black uppercase tracking-widest text-slate-400">{t.totalPax}</label>
+                  </div>
                   <div className="relative">
                     <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none"><Plus className="h-5 w-5 text-slate-400" /></div>
-                    <input type="number" min="1" value={paxCount} onChange={(e) => setPaxCount(e.target.value)} placeholder={t.paxPlaceholder} className="w-full pl-14 pr-6 py-5 bg-slate-100 border-2 border-transparent rounded-[1.5rem] font-black focus:outline-none focus:ring-4 focus:ring-indigo-500/10 transition-all focus:border-indigo-700" />
+                    <input 
+                      type="number" 
+                      min="1" 
+                      max="500"
+                      value={paxCount} 
+                      onChange={(e) => setPaxCount(e.target.value)} 
+                      onBlur={() => setFormTouched(prev => ({ ...prev, pax: true }))}
+                      placeholder={t.paxPlaceholder} 
+                      className={`w-full pl-14 pr-6 py-5 bg-slate-100 border-2 rounded-[1.5rem] font-black focus:outline-none focus:ring-4 transition-all ${paxError ? 'border-rose-300 ring-rose-500/10' : 'border-transparent focus:ring-indigo-500/10 focus:border-indigo-700'}`} 
+                    />
                   </div>
+                  {paxError && <div className="flex items-center gap-1.5 text-rose-600 text-[11px] font-black mt-1 ml-1 uppercase tracking-wider animate-in fade-in slide-in-from-top-1"><AlertCircle className="w-3.5 h-3.5" /> {paxError}</div>}
                 </div>
 
                 <div className="flex gap-4 pt-4">
-                  <button onClick={() => setShowLawatanModal(false)} className="flex-1 py-4 bg-slate-100 text-slate-600 font-black rounded-2xl hover:bg-slate-200 transition-all uppercase text-sm tracking-widest">{t.cancel}</button>
+                  <button onClick={() => { setShowLawatanModal(false); setFormTouched({ org: false, pax: false }); }} className="flex-1 py-4 bg-slate-100 text-slate-600 font-black rounded-2xl hover:bg-slate-200 transition-all uppercase text-sm tracking-widest">{t.cancel}</button>
                   <button 
-                    disabled={!orgName || !paxCount || parseInt(paxCount) < 1}
-                    onClick={() => handleCheckIn(VisitorCategory.LAWATAN, lawatanLocation, orgName, parseInt(paxCount))} 
-                    className="flex-1 py-4 bg-indigo-700 text-white font-black rounded-2xl hover:bg-indigo-800 transition-all shadow-xl uppercase text-sm tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={!isLawatanFormValid}
+                    onClick={() => handleCheckIn(VisitorCategory.LAWATAN, lawatanLocation, orgName.trim(), parseInt(paxCount))} 
+                    className="flex-1 py-4 bg-indigo-700 text-white font-black rounded-2xl hover:bg-indigo-800 transition-all shadow-xl uppercase text-sm tracking-widest disabled:opacity-30 disabled:cursor-not-allowed disabled:grayscale"
                   >
                     {t.completeCheckin}
                   </button>
@@ -563,7 +606,6 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Admin Login Modal */}
       {showAuthModal && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-slate-900/70 backdrop-blur-xl animate-in fade-in duration-300">
           <div className="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-400 border border-white/20">
@@ -646,7 +688,7 @@ const App: React.FC = () => {
               <span className="text-white font-serif text-xl tracking-tight">Malay Civilization Institute</span>
           </div>
           <div className="text-center text-slate-300 text-sm font-black uppercase tracking-[0.25em] opacity-80">
-            <p>ATMA Visitor Management &copy; {new Date().getFullYear()}</p>
+            <p>IPM Visitor Management &copy; {new Date().getFullYear()}</p>
           </div>
           <div className="flex items-center justify-center gap-6">
             <span className="px-4 py-1.5 rounded-full bg-white/10 text-white text-[9px] font-black uppercase tracking-widest border border-white/10">{t.staffOnly}</span>

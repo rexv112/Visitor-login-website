@@ -1,7 +1,7 @@
 
 export const translations = {
   en: {
-    welcome: "Welcome to Malay Civilization Institute",
+    welcome: "Welcome to the Malay Civilization Institute",
     selectCategory: "Please select your visitor category and the location you are visiting today.",
     museum: "Museum",
     gallery: "Arts Gallery",
@@ -59,10 +59,15 @@ export const translations = {
     endDate: "End Date",
     clearFilter: "Clear Filter",
     rangeTotal: "Range Total",
-    applyFilter: "Apply Filter"
+    applyFilter: "Apply Filter",
+    errOrgRequired: "Organization name is required",
+    errOrgShort: "Name must be at least 3 characters",
+    errPaxRequired: "Total visitors is required",
+    errPaxMin: "Number of visitors must be at least 1",
+    errPaxMax: "Group size exceeds maximum limit (500)"
   },
   ms: {
-    welcome: "Selamat Datang ke Institut Alam & Tamadun Melayu",
+    welcome: "Selamat Datang ke Institut Peradaban Melayu",
     selectCategory: "Sila pilih kategori pelawat dan lokasi yang anda lawati hari ini.",
     museum: "Muzium",
     gallery: "Galeri Seni",
@@ -120,7 +125,12 @@ export const translations = {
     endDate: "Tarikh Tamat",
     clearFilter: "Padam Penapis",
     rangeTotal: "Jumlah Julat",
-    applyFilter: "Tapis"
+    applyFilter: "Tapis",
+    errOrgRequired: "Nama organisasi diperlukan",
+    errOrgShort: "Nama mestilah sekurang-kurangnya 3 aksara",
+    errPaxRequired: "Jumlah pelawat diperlukan",
+    errPaxMin: "Bilangan pelawat mestilah sekurang-kurangnya 1",
+    errPaxMax: "Saiz kumpulan melebihi had maksimum (500)"
   }
 };
 
