@@ -1,40 +1,30 @@
 
 import { Visit, VisitorCategory, LocationType } from '../types';
 
-const VISITS_KEY = 'artemis_visits_v1';
-const RESET_STATE_KEY = 'artemis_reset_state';
+const VISITS_KEY = 'artemis_visits_v2';
+const RESET_STATE_KEY = 'artemis_reset_state_v2';
 
 interface ResetState {
-  lastResetAt: string; // ISO string
-  currentDailyNumber: number;
+  lastDailyReset: string;
+  lastWeeklyReset: string;
+  lastMonthlyReset: string;
+  lastYearlyReset: string;
+  currentDailyCount: number;
+  currentWeeklyCount: number;
+  currentMonthlyCount: number;
+  currentYearlyCount: number;
 }
 
-/**
- * Calculates if we need to reset the daily counter based on the 12:00 PM rule.
- */
-const shouldResetDailyNumber = (lastResetAt: string): boolean => {
-  const now = new Date();
-  const lastReset = new Date(lastResetAt);
-  
-  // Define "Today at 12:00 PM"
-  const todayNoon = new Date(now);
-  todayNoon.setHours(12, 0, 0, 0);
-
-  // If we haven't reset since before today's 12:00 PM AND it's now after 12:00 PM
-  if (lastReset < todayNoon && now >= todayNoon) {
-    return true;
-  }
-  
-  // If last reset was on a previous day and we haven't hit noon yet today, 
-  // but we are still in a new "cycle" (e.g. it's 8 AM today and last reset was 12 PM yesterday),
-  // we actually keep the same number until 12 PM today.
-  
-  // Simple check: if different calendar days and it's past 12 PM
-  const isDifferentDay = lastReset.toDateString() !== now.toDateString();
-  if (isDifferentDay && now >= todayNoon) return true;
-
-  return false;
-};
+const getInitialResetState = (): ResetState => ({
+  lastDailyReset: new Date(0).toISOString(),
+  lastWeeklyReset: new Date(0).toISOString(),
+  lastMonthlyReset: new Date(0).toISOString(),
+  lastYearlyReset: new Date(0).toISOString(),
+  currentDailyCount: 0,
+  currentWeeklyCount: 0,
+  currentMonthlyCount: 0,
+  currentYearlyCount: 0,
+});
 
 export const storageService = {
   getVisits: (): Visit[] => {
@@ -42,35 +32,70 @@ export const storageService = {
     return data ? JSON.parse(data) : [];
   },
 
-  saveVisit: (category: VisitorCategory, location: LocationType): Visit => {
+  saveVisit: (
+    category: VisitorCategory, 
+    location: LocationType, 
+    groupInfo?: string, 
+    groupSize: number = 1
+  ): Visit => {
     const visits = storageService.getVisits();
     const resetStateStr = localStorage.getItem(RESET_STATE_KEY);
-    let resetState: ResetState = resetStateStr 
-      ? JSON.parse(resetStateStr) 
-      : { lastResetAt: new Date(0).toISOString(), currentDailyNumber: 0 };
+    let state: ResetState = resetStateStr ? JSON.parse(resetStateStr) : getInitialResetState();
 
-    // Check if we need to reset daily counter (at 12:00 PM)
-    if (shouldResetDailyNumber(resetState.lastResetAt)) {
-      resetState.currentDailyNumber = 0;
-      // We set the lastResetAt to today at 12:00 PM to mark the start of the new window
-      const todayNoon = new Date();
-      todayNoon.setHours(12, 0, 0, 0);
-      resetState.lastResetAt = todayNoon.toISOString();
+    const now = new Date();
+
+    // 1. Daily Reset Logic (Midnight 00:00)
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    if (new Date(state.lastDailyReset).getTime() < startOfDay.getTime()) {
+      state.currentDailyCount = 0;
+      state.lastDailyReset = startOfDay.toISOString();
     }
 
-    resetState.currentDailyNumber += 1;
-    
+    // 2. Weekly Reset Logic (Sunday 00:00)
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    if (new Date(state.lastWeeklyReset).getTime() < startOfWeek.getTime()) {
+      state.currentWeeklyCount = 0;
+      state.lastWeeklyReset = startOfWeek.toISOString();
+    }
+
+    // 3. Monthly Reset Logic (1st 00:00)
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    if (new Date(state.lastMonthlyReset).getTime() < startOfMonth.getTime()) {
+      state.currentMonthlyCount = 0;
+      state.lastMonthlyReset = startOfMonth.toISOString();
+    }
+
+    // 4. Yearly Reset Logic (Jan 1st 00:00)
+    const startOfYear = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    if (new Date(state.lastYearlyReset).getTime() < startOfYear.getTime()) {
+      state.currentYearlyCount = 0;
+      state.lastYearlyReset = startOfYear.toISOString();
+    }
+
+    // Increment all by groupSize
+    state.currentDailyCount += groupSize;
+    state.currentWeeklyCount += groupSize;
+    state.currentMonthlyCount += groupSize;
+    state.currentYearlyCount += groupSize;
+
     const newVisit: Visit = {
       id: crypto.randomUUID(),
       category,
       location,
-      timestamp: new Date().toISOString(),
-      dailyNumber: resetState.currentDailyNumber
+      timestamp: now.toISOString(),
+      dailyNumber: state.currentDailyCount,
+      weeklyNumber: state.currentWeeklyCount,
+      monthlyNumber: state.currentMonthlyCount,
+      yearlyNumber: state.currentYearlyCount,
+      groupInfo,
+      groupSize
     };
 
-    const updatedVisits = [newVisit, ...visits];
-    localStorage.setItem(VISITS_KEY, JSON.stringify(updatedVisits));
-    localStorage.setItem(RESET_STATE_KEY, JSON.stringify(resetState));
+    localStorage.setItem(VISITS_KEY, JSON.stringify([newVisit, ...visits]));
+    localStorage.setItem(RESET_STATE_KEY, JSON.stringify(state));
 
     return newVisit;
   },

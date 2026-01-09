@@ -1,7 +1,8 @@
 
 export enum VisitorCategory {
   STUDENT = 'Student',
-  VISITOR = 'Visitor'
+  VISITOR = 'Visitor',
+  LAWATAN = 'Lawatan'
 }
 
 export enum LocationType {
@@ -14,7 +15,12 @@ export interface Visit {
   category: VisitorCategory;
   location: LocationType;
   timestamp: string; // ISO string
-  dailyNumber: number;
+  dailyNumber: number; // This stores the END number of the count for this entry
+  weeklyNumber: number;
+  monthlyNumber: number;
+  yearlyNumber: number;
+  groupInfo?: string; // e.g., School name
+  groupSize?: number; // Total number of people in the group
 }
 
 export interface CounterStats {
